@@ -1,0 +1,142 @@
+drop table temp_cust;
+
+create table temp_cust as
+select * from customers;
+
+insert into temp_cust
+select * from temp_cust;
+
+select count(*) from temp_cust;
+
+insert into temp_cust
+select * from temp_cust;
+
+select count(*) from temp_cust;
+
+insert into temp_cust
+select * from temp_cust;
+
+select count(*) from temp_cust;
+
+insert into temp_cust
+select * from temp_cust;
+
+select count(*) from temp_cust;
+
+insert into temp_cust
+select * from temp_cust;
+
+select count(*) from temp_cust;
+
+insert into temp_cust
+select * from temp_cust;
+
+select count(*) from temp_cust;
+drop table N_orders;
+drop table N_cust;
+
+create table N_cust
+(cust_no      number not null,
+ comp_name    varchar(40) not null,
+ contactName  varchar(30),
+ contactTitle varchar(30),
+ city         varchar(15),
+ region       varchar(15),
+ postcode     varchar(10),
+ country      varchar(15),
+ primary key(cust_no)
+);
+
+drop sequence customer_seq;
+
+create sequence customer_seq
+       start with 100001
+       increment by 1;
+
+insert into n_cust
+select customer_seq.nextval,
+       substr(companyName, 1, 20),
+       contactName,
+       contactTitle,
+       city,
+       region,
+       postalCode,
+       country
+from temp_cust;
+
+drop sequence order_seq;
+
+create sequence order_seq
+ start with 100001
+ increment by 1;
+
+DROP TABLE n_orders;
+
+CREATE TABLE n_orders (
+    order_ID NUMBER NOT NULL,
+    cust_ID NUMBER NOT NULL,
+    staffID NUMBER,
+    orderDate DATE,
+    requiredDate DATE,
+    shippedDate DATE,
+    shipVia NUMBER,
+    freight NUMBER(6,2),
+    PRIMARY KEY (order_ID),
+    FOREIGN KEY (cust_ID) REFERENCES n_cust(cust_No)
+);
+
+set serveroutput on
+
+DECLARE
+    StartDate DATE := TO_DATE('01/01/2015', 'DD/MM/YYYY');
+    EndDate DATE := TO_DATE('29/02/2024', 'DD/MM/YYYY');
+
+    v_stop NUMBER;
+    v_orderID NUMBER;
+    v_custID NUMBER;
+    v_staffID NUMBER;
+    v_orderDate DATE;
+    v_requiredDate DATE;
+    v_shippedDate DATE;
+    v_shipVia NUMBER;
+    v_freight NUMBER(6,2);
+
+    countWhile NUMBER := 0;
+    countOrders NUMBER := 0;
+
+BEGIN
+    WHILE (StartDate <= EndDate) LOOP
+        v_stop := TRUNC(DBMS_RANDOM.VALUE(5, 51));
+
+        FOR i_counter IN 1..v_stop LOOP
+            v_orderID := order_seq.nextval;
+            v_custID := TRUNC(DBMS_RANDOM.VALUE(100001, 105825));
+            v_staffID := TRUNC(DBMS_RANDOM.VALUE(1, 10));
+            v_orderDate := StartDate;
+            v_requiredDate := StartDate + 7;
+            v_shippedDate := StartDate + 3;
+            v_shipVia := TRUNC(DBMS_RANDOM.VALUE(1, 7));
+            v_freight := ROUND(DBMS_RANDOM.VALUE(5, 100), 2);
+
+            INSERT INTO n_orders VALUES
+                (v_orderID,
+                v_custID,
+                v_staffID,
+                v_orderDate,
+                v_requiredDate,
+                v_shippedDate,
+                v_shipVia,
+                v_freight);
+
+            countOrders := countOrders + 1;
+        END LOOP;
+
+        StartDate := StartDate + 1;
+        countWhile := countWhile + 1;
+    END LOOP;
+
+    DBMS_OUTPUT.PUT_LINE('No of days is ' || countWhile);
+    DBMS_OUTPUT.PUT_LINE('No of orders is ' || countOrders);
+
+END;
+/

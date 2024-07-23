@@ -1,0 +1,80 @@
+INSERT INTO Products VALUES (78, 'Simon', 1, 1, '10 boxes x 20 bags', 18, 39, 0, 10, 0);
+INSERT INTO Products VALUES (79, 'Guava', 1, 1, '10 boxes x 20 bags', 18, 39, 0, 10, 0);
+
+
+-- 1) Staging Area 
+drop table product_staging_area;
+
+CREATE TABLE Product_Staging_Area AS
+SELECT P.productID,
+       UPPER(P.productName) as ProductName,
+       UPPER(C.categoryName) as CategoryName,
+       P.discontinued
+FROM products P
+JOIN categories C on P.categoryID=C.categoryID;
+
+
+--2) VIEW
+create or replace view count_product_data as
+select count(*) as Num_Records_Before_Scrub
+from product_staging_area;
+
+select * from count_product_data;
+
+
+-- 3) Scrubbing Dirty Data
+CREATE OR REPLACE PROCEDURE Scrub_Product_Staging_Area AS
+BEGIN
+    -- Remove records where either productName or categoryName is NULL
+    DELETE FROM Product_Staging_Area
+    WHERE productName IS NULL OR categoryName IS NULL OR discontinued IS NULL;
+    FOR rec IN (SELECT * FROM Product_Staging_Area) LOOP
+	IF rec.discontinued NOT IN (0, 1) THEN
+            rec.discontinued := 0; 
+        END IF;
+
+        UPDATE Product_Staging_Area
+        SET productName = UPPER(productName), 
+            categoryName = UPPER(categoryName),
+            discontinued = rec.discontinued;
+    END LOOP;
+    COMMIT;
+EXCEPTION
+  WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
+
+exec Scrub_Product_Staging_Area;
+
+-- 4) For View
+create or replace view count_product_data as
+select count(*) as Num_Records_After_Scrub
+from product_staging_area;
+
+select * from count_product_data;
+
+
+-- 5) For adding cleaned new records into Dimension table)
+CREATE OR REPLACE PROCEDURE Insert_CProduct_Dim AS
+BEGIN
+    insert into Product_Dim (product_key, productID, productName, categoryName, discontinued)
+    select prod_dim_seq.nextval,C.*
+    from Product_Staging_Area C
+    where C.productID NOT IN (select distinct productID from product_dim);
+END;
+/
+
+exec insert_Cproduct_dim;
+
+
+
+
+
+
+
+
+
+
+
+

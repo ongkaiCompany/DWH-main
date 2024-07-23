@@ -1,0 +1,146 @@
+drop table temp_items;
+create table temp_items
+(rec_no     number,
+ ORDERID    NUMBER,
+ productID  NUMBER,
+ UNITPRICE  NUMBER(6,2),
+ QUANTITY   NUMBER,
+ DISCOUNT   NUMBER(3,2) 
+);
+
+delete temp_items;
+
+set serveroutput on
+
+
+declare
+   cursor order_cur is
+     select order_id from n_orders;
+ 
+   order_rec order_cur%ROWTYPE;
+
+   counter       number:=0;
+   v_no_of_items number(1);
+   v_prod_id     number;
+   v_quantity    number(2);
+   v_price       number(6,2);
+   v_discount    number(3,2);
+begin
+   for order_rec IN order_cur loop
+      v_no_of_items:=TRUNC(dbms_random.value(1,5));
+      for ctr in 1..v_no_of_items loop
+         counter:=counter+1;
+         v_prod_id := TRUNC(dbms_random.value(1,78)); 
+         LOOP
+            EXIT WHEN v_prod_id NOT IN (5, 9, 17, 24, 28, 29, 42, 53);
+            v_prod_id := TRUNC(dbms_random.value(1,78)); 
+         END LOOP;    
+         v_quantity:=TRUNC(dbms_random.value(1,11));    
+         v_discount := ROUND(dbms_random.value(0.0,0.25), 2);
+
+         select unitprice INTO v_price
+         from products
+         where productId=v_prod_id;
+
+         insert into temp_items values(
+               counter, 
+               order_rec.order_Id,
+               v_prod_id, 
+               v_price,
+               v_quantity,                
+               v_discount
+               );
+      end loop;
+   end loop;
+dbms_output.put_line('Count is '||counter);
+end;
+/
+select to_char(sysdate,'hh:mi:ss') from dual;
+
+select count(*) from temp_items;
+select count(distinct(orderid||productid)) No_DUP
+from temp_items;
+
+  
+-- Remove duplicate orderid, productid
+-- identify all orders with duplicate product_id
+-- store to another temp table
+
+drop table chk_duplicate;
+
+create table chk_duplicate as
+   select rec_no,
+          orderid||productid as Ord_Prod
+   from temp_items
+   where orderid IN
+         (Select orderid
+          from temp_items
+          group by orderid
+           having count(productid)>count(distinct productid)
+         )
+   order by Ord_Prod; 
+
+-- capture the rec_no to identify which row to delete
+-- from the temp_items table
+
+drop table delete_dup_row;
+
+create table delete_dup_row
+(recNumber number);
+
+-- compare each record to identify duplicated rows
+declare
+   cursor duplicate_cur is
+      select * from chk_duplicate;
+
+   v_rec_no  number;
+   v_ordProd1 varchar(80);
+   v_ordProd2 varchar(80);
+
+begin
+   open duplicate_cur; -- load data to memory
+   fetch duplicate_cur INTO v_rec_no, v_ordProd1; -- read first row
+   LOOP
+      fetch duplicate_cur INTO v_rec_no, v_ordProd2; -- read next row
+      EXIT WHEN duplicate_cur%NOTFOUND;
+
+      if (v_ordProd1=v_ordProd2) then
+         insert into delete_dup_row values(v_rec_no);
+      else
+         v_ordProd1:=v_ordProd2;
+      end if;
+   END LOOP;     
+   close duplicate_cur; -- free the memory space
+end;
+/
+
+
+commit;
+
+delete temp_items
+where rec_no in (select * 
+                 from delete_dup_row);
+
+drop table n_order_details;
+
+create table n_order_details as
+select * from order_details;
+
+delete n_order_details;
+
+insert into n_order_details
+select ORDERID, PRODUCTID, UNITPRICE, QUANTITY, DISCOUNT 
+from temp_items;
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,100 @@
+INSERT INTO Suppliers VALUES (30, 'KongTiao', 'Eliot Brandt', 'Sales Representative', 'Annecy', NULL, '74000', 'France');
+INSERT INTO Suppliers VALUES (31, 'KGB', 'Consola Ray', 'Accounting Manager', 'Ste-Hyacinthe', 'Quebec', 'J2S 7S8', 'Canada');
+
+
+-- 1) Staging Area
+drop table supplier_staging_area;
+
+CREATE TABLE Supplier_Staging_Area AS
+SELECT 
+    supplierid,
+    companyname,
+    country,
+    region,
+    city,
+    postalcode
+FROM suppliers;
+
+--2) VIEW
+create or replace view count_supplier_data as
+select count(*) as Num_Records_Before_Scrub
+from supplier_staging_area;
+
+select * from count_supplier_data;
+
+
+-- 3) Scrubbing Dirty Data
+CREATE OR REPLACE PROCEDURE clean_supplier_data AS
+BEGIN
+  DELETE FROM supplier_staging_area
+  WHERE city is null and region is null and postalcode is null and country is null;
+  FOR supplier_rec in (SELECT * FROM supplier_staging_area) LOOP	
+
+      -- Check for numbers in Country, Region, and City
+      IF REGEXP_LIKE(supplier_rec.country, '[0-9]') THEN
+         DBMS_OUTPUT.PUT_LINE('Error: Country cannot contain numbers');
+         delete from supplier_staging_area
+         where supplierid = supplier_rec.supplierid;
+         continue;
+      END IF;
+
+      IF REGEXP_LIKE(supplier_rec.region, '[0-9]') THEN
+          DBMS_OUTPUT.PUT_LINE('Error: Region cannot contain numbers');
+          delete from supplier_staging_area
+          where supplierid = supplier_rec.supplierid;
+          continue;
+      END IF;
+
+      IF REGEXP_LIKE(supplier_rec.city, '[0-9]') THEN
+          DBMS_OUTPUT.PUT_LINE('Error: City cannot contain numbers');
+          delete from supplier_staging_area
+          where supplierid = supplier_rec.supplierid;
+          continue;
+      END IF;
+
+      -- Clean Country, Region, City, and Postal Code (convert to uppercase)
+      UPDATE supplier_staging_area
+      Set country = UPPER(supplier_rec.country), 
+          region = UPPER(supplier_rec.region), 
+          city = UPPER(supplier_rec.city), 
+          postalcode = UPPER(supplier_rec.postalcode),
+          companyname = INITCAP(REGEXP_REPLACE(supplier_rec.companyname, '[^a-zA-Z ]', ''))
+      WHERE supplierid = supplier_rec.supplierid;
+      
+  END LOOP;
+  COMMIT;
+EXCEPTION
+  WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
+
+exec clean_supplier_data;
+
+
+-- 4) For View
+create or replace view count_supplier_data as
+select count(*) as Num_Records_After_Scrub
+from supplier_staging_area;
+
+select * from count_supplier_data;
+
+
+-- 5) For adding cleaned new records into Dimension table
+CREATE OR REPLACE PROCEDURE Insert_CSupplier_Dim AS
+BEGIN
+    insert into Supplier_Dim (Supplier_key, SupplierID, SupplierName, Country, Region, City, PostalCode)
+    select supplier_dim_seq.nextval, S.*
+    from supplier_staging_area S
+    where S.supplierid not in (select distinct supplierid from supplier_dim);           
+END;
+/
+
+exec Insert_CSupplier_Dim;
+
+
+
+
+
+
+

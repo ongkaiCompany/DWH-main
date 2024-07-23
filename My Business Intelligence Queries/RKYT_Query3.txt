@@ -1,0 +1,90 @@
+SET VERIFY OFF;
+SET PAGESIZE 68;
+SET LINESIZE 400;
+clear columns;
+clear breaks;
+clear computes;
+
+DEFINE page_count = 5
+
+ACCEPT year1 PROMPT 'Enter the first year: '
+ACCEPT year2 PROMPT 'Enter the second year: '
+
+REPFOOTER SKIP 5 '                                                                      ( END OF REPORT )' 
+TTITLE '======================================================================================================================================================' SKIP 1-
+'                                                Top 5 Products for each Country for Years &year1 and &year2                           ' SQL.PNO " / &page_count" SKIP 1-
+'======================================================================================================================================================' -
+SKIP 1 LEFT 'Report Date: '  _Date SKIP 1 -
+'======================================================================================================================================================' -
+
+BTITLE '======================================================================================================================================================' SKIP 1-
+'                                                                        End of Page' FORMAT 9 SQL.PNO SKIP 1-
+'======================================================================================================================================================' SKIP 2-
+
+
+COLUMN country FORMAT A20 HEADING 'Country';
+COLUMN cal_year FORMAT A5 HEADING "Year";
+COLUMN productname FORMAT A40 HEADING 'Product Name';
+COLUMN q1_sales_amt FORMAT $999,990.99 HEADING 'Q1 Sales Amount';
+COLUMN q2_sales_amt FORMAT $999,990.99 HEADING 'Q2 Sales Amount';
+COLUMN q3_sales_amt FORMAT $999,990.99 HEADING 'Q3 Sales Amount';
+COLUMN q4_sales_amt FORMAT $999,990.99 HEADING 'Q4 Sales Amount';
+COLUMN total_sales_amt FORMAT $999,999.99 HEADING 'Total Sales Amount';
+COLUMN product_rank FORMAT 999 HEADING 'Rank';
+BREAK ON country SKIP 1 ON cal_year SKIP 1;
+
+WITH quarterly_sales AS (
+    SELECT 
+        c.country,
+        p.productname,
+        d.cal_year,
+        SUM(CASE WHEN d.cal_quarter = 'Q1' THEN orf.line_total ELSE 0.00 END) AS q1_sales_amt,
+        SUM(CASE WHEN d.cal_quarter = 'Q2' THEN orf.line_total ELSE 0.00 END) AS q2_sales_amt,
+        SUM(CASE WHEN d.cal_quarter = 'Q3' THEN orf.line_total ELSE 0.00 END) AS q3_sales_amt,
+        SUM(CASE WHEN d.cal_quarter = 'Q4' THEN orf.line_total ELSE 0.00 END) AS q4_sales_amt,
+        SUM(orf.line_total) AS total_sales_amt,
+        RANK() OVER (PARTITION BY c.country, d.cal_year ORDER BY SUM(orf.line_total) DESC) AS product_rank
+    FROM 
+        order_fact orf
+    JOIN 
+        date_dim d ON orf.date_key = d.date_key
+    JOIN 
+        customer_dim c ON orf.customer_key = c.customer_key
+    JOIN
+        product_dim p ON orf.product_key = p.product_key
+    JOIN 
+        (
+            SELECT productid, productname
+            FROM product_dim
+            WHERE UPPER(currentRowIndicator) = 'Y'
+        ) latest_products ON p.productid = latest_products.productid
+    WHERE 
+        d.cal_year IN (&year1, &year2)
+    GROUP BY 
+        c.country,
+        p.productname,
+        d.cal_year
+)
+SELECT 
+    country,
+    TO_CHAR(cal_year, '9999') AS cal_year,
+    productname,
+    q1_sales_amt,
+    q2_sales_amt,
+    q3_sales_amt,
+    q4_sales_amt,
+    total_sales_amt
+FROM 
+    quarterly_sales
+WHERE 
+    product_rank <= 5
+ORDER BY 
+    country, 
+    cal_year, 
+    product_rank;
+
+clear columns;
+clear breaks;
+clear computes;
+
+

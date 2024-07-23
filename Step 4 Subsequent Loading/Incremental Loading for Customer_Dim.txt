@@ -1,0 +1,127 @@
+INSERT INTO N_cust VALUES (105825, 'ATE', 'Simon Mark', 'Worker', 'Berlin', NULL, '12209', 'Germany');
+INSERT INTO N_cust VALUES (105826, 'WHO', 'Popeye', 'Worker', 'Berlin', NULL, '12209', 'Germany');
+INSERT INTO N_cust VALUES (105827, 'WAKANDA', NULL, NULL, NULL, NULL, NULL, NULL);
+INSERT INTO N_cust VALUES (105827, 'SIMON', NULL, NULL, NULL, NULL, NULL, NULL);
+
+--1) Staging Area
+drop table customer_staging_area;
+
+CREATE TABLE customer_staging_area AS
+SELECT cust_no,
+       comp_name,
+       country,
+       region,
+       city,
+       postcode
+FROM n_cust;
+
+--2) VIEW
+create or replace view count_cust_data as
+select count(*) as Num_Records_Before_Scrub
+from customer_staging_area;
+
+select * from count_cust_data;
+
+
+--3) Scrubbing Dirty Data
+CREATE OR REPLACE PROCEDURE Scrub_Customer_Staging AS
+BEGIN
+    DELETE FROM Customer_Staging_Area
+    WHERE city is null and region is null and postcode is null and country is null;
+    FOR rec IN (SELECT * FROM Customer_Staging_Area) LOOP
+        IF rec.comp_name is NOT NULL THEN
+	    rec.comp_name := UPPER(TRIM(rec.comp_name));
+        END IF;
+
+        IF rec.city IS NOT NULL THEN
+            rec.city := UPPER(TRIM(rec.city));
+        END IF;
+
+        IF rec.region IS NOT NULL THEN
+            rec.region := UPPER(TRIM(rec.region));
+        END IF;
+
+        IF rec.postcode IS NOT NULL THEN
+            rec.postcode := UPPER(TRIM(rec.postcode));
+        END IF;
+
+        IF rec.country IS NOT NULL THEN
+            rec.country := UPPER(TRIM(rec.country));
+        END IF;
+
+        -- Update the row with cleansed data
+        UPDATE Customer_Staging_Area
+        SET
+            comp_name = rec.comp_name,
+            city = rec.city,
+            region = rec.region,
+            postcode = rec.postcode,
+            country = rec.country
+        WHERE cust_no = rec.cust_no;
+    END LOOP;
+    COMMIT;
+EXCEPTION
+  WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
+
+exec Scrub_Customer_Staging;
+
+
+-- 4) For View
+create or replace view count_cust_data as
+select count(*) as Num_Records_After_Scrub
+from customer_staging_area;
+
+select * from count_cust_data;
+ALTER SESSION SET NLS_DATE_FORMAT = 'DD/MM/YYYY';
+
+-- 5) For adding cleaned new records into Dimension table
+CREATE OR REPLACE PROCEDURE Insert_CCustomer_Dim AS
+BEGIN
+    insert into Customer_Dim(customer_key, cust_no, comp_name, country, region, city, postcode, effectiveDate)
+    select cust_dim_seq.nextval,
+           C.*, 
+           SYSDATE 
+    from customer_staging_area C
+    where c.cust_no not in (select distinct cust_no from customer_dim);           
+END;
+/
+
+exec insert_ccustomer_dim;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+       

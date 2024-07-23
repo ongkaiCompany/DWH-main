@@ -1,0 +1,77 @@
+SET VERIFY OFF;
+SET PAGESIZE 42;
+SET LINESIZE 170;
+clear columns;
+clear breaks;
+clear computes;
+
+
+DEFINE page_count = 2
+
+ACCEPT year1 PROMPT 'Enter the first year: '
+ACCEPT year2 PROMPT 'Enter the second year: '
+
+REPFOOTER SKIP 3 '                                                   ( END OF REPORT )' 
+TTITLE '====================================================================================================================' SKIP 1-
+'                          Analysis of Sales by Country and Region for Years &year1 and &year2         ' SQL.PNO " / &page_count" SKIP 1-
+'====================================================================================================================' -
+SKIP 1 LEFT 'Report Date: '  _Date SKIP 1 -
+'====================================================================================================================' -
+
+BTITLE '====================================================================================================================' SKIP 1-
+'                                                     End of Page' FORMAT 9 SQL.PNO SKIP 1-
+'====================================================================================================================' SKIP 2-
+
+COLUMN country FORMAT A20 HEADING "Country";
+COLUMN region FORMAT A20 HEADING "Region";
+COLUMN sales_&year1 FORMAT $999,999.99 HEADING "Sales &year1";
+COLUMN sales_&year2 FORMAT $999,999.99 HEADING "Sales &year2";
+COLUMN diff_actual FORMAT $999,999.99 HEADING "Actual Diff";
+COLUMN diff_percentage FORMAT 999.99 HEADING "Sales Diff (%)" FORMAT A15;
+COLUMN rank_&year1 FORMAT 999 HEADING "Rank &year1";
+COLUMN rank_&year2 FORMAT 999 HEADING "Rank &year2";
+BREAK ON country SKIP 1 ON report;
+
+SELECT 
+    country,
+    NVL(region, 'Unknown') AS region,
+    TO_CHAR("&year1", '$999,999.99') AS sales_&year1,
+    TO_CHAR("&year2", '$999,999.99') AS sales_&year2,
+    TO_CHAR("&year2" - "&year1", '$999,999.99') AS diff_actual,
+    CASE
+        WHEN (("&year2" - "&year1") / "&year1") * 100 < 1 AND (("&year2" - "&year1") / "&year1") * 100 > -1 THEN TO_CHAR((("&year2" - "&year1") / "&year1") * 100, '990D00') || '%'
+        ELSE TO_CHAR((("&year2" - "&year1") / "&year1") * 100, '999.99') || '%'
+    END AS diff_percentage,
+    RANK() OVER (ORDER BY "&year1" DESC) AS rank_&year1,
+    RANK() OVER (ORDER BY "&year2" DESC) AS rank_&year2
+FROM (
+    SELECT 
+        d.cal_year,
+        trim(c.country) as country,
+        trim(c.region) as region,
+        SUM(orf.line_total) AS total_sales_amt
+    FROM 
+        order_fact orf
+    JOIN 
+        date_dim d ON orf.date_key = d.date_key
+    JOIN 
+        customer_dim c ON orf.customer_key = c.customer_key
+    WHERE 
+        d.cal_year IN (&year1, &year2)
+    GROUP BY 
+        d.cal_year,
+        trim(c.country),
+        trim(c.region)
+)
+PIVOT (
+    SUM(total_sales_amt) 
+    FOR cal_year IN ('&year1' AS "&year1", '&year2' AS "&year2")
+)
+ORDER BY 
+    country, 
+    region;
+
+SET VERIFY ON;
+clear columns;
+clear breaks;
+clear computes;

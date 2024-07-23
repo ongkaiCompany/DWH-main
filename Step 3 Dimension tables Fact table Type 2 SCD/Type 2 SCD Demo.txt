@@ -1,0 +1,103 @@
+ALTER SESSION SET NLS_DATE_FORMAT = 'DD/MM/YYYY';
+set serveroutput on;
+
+-- 1. Demo Type 2 SCD for Product Dimension
+
+CREATE OR REPLACE PROCEDURE Insert_Product_Dim_Record(
+    p_productID NUMBER,
+    p_productName VARCHAR,
+    p_categoryName VARCHAR,
+    p_discontinued NUMBER
+)
+IS
+BEGIN
+    -- Update the expiration date and current row indicator of the previous record (if exists)
+    UPDATE Product_dim
+    SET expirationDate = TRUNC(SYSDATE)-1,     -- To expire the previous record 1 day before the effective date of the new record
+        currentRowIndicator = 'N'     -- To mark the previous record as expired
+    WHERE productID = p_productID
+    AND currentRowIndicator = 'Y';    -- To update only the current active record
+    
+    -- Insert the new record
+    INSERT INTO Product_dim (product_key, productID, productName, categoryName, discontinued, effectiveDate, expirationDate, currentRowIndicator)
+    VALUES (prod_dim_seq.nextval, p_productID, p_productName, p_categoryName, p_discontinued, SYSDATE, '31/12/9999', 'Y');
+    
+    COMMIT;
+    
+    DBMS_OUTPUT.PUT_LINE('Record inserted successfully');
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
+
+exec Insert_Product_Dim_Record(1, 'CHAI BERRIES', 'BEVERAGES', 0);
+
+
+-----------------------------------------------------------------------------------------------------------
+--2. Demo Type 2 SCD for Employee Dimension
+CREATE OR REPLACE PROCEDURE Insert_Emp_Dim_Record(
+    e_employeeid   number,
+    e_employeename varchar,
+    e_hiredate     date,
+    e_country      varchar,
+    e_region       varchar,
+    e_city         varchar,
+    e_postalCode   varchar      
+)
+IS
+BEGIN
+    UPDATE Employee_dim
+    SET expirationDate = TRUNC(SYSDATE)-1,
+        currentRowIndicator = 'N'
+    WHERE employeeid = e_employeeid
+    AND currentRowIndicator = 'Y';
+
+    INSERT INTO employee_dim (Employee_key, EmployeeID, EmployeeName, HireDate, Country, Region, City, PostalCode, EffectiveDate, ExpirationDate, currentRowIndicator)
+    VALUES (employee_dim_seq.nextval, e_employeeid, e_employeename, e_hiredate, e_country, e_region, e_city, e_postalCode, SYSDATE, '31/12/9999', 'Y');
+
+    COMMIT;
+
+    DBMS_OUTPUT.PUT_LINE('Record inserted successfully');
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
+
+exec Insert_Emp_Dim_Record(9, 'Annie Dodsworth', '15/11/1994', 'UK', NULL, 'LONDON', 'WG2 7LT');
+
+
+----------------------------------------------------------------------------------------------------------
+--3. Demo Type 2 SCD for Customer Dimension
+CREATE OR REPLACE PROCEDURE Insert_Cust_Dim_Record(
+     c_cust_no   NUMBER,
+     c_comp_name varchar,
+     c_country   varchar,
+     c_region    varchar,
+     c_city      varchar,
+     c_postcode  varchar
+)
+IS
+BEGIN
+    UPDATE Customer_dim
+    SET expirationDate = TRUNC(SYSDATE)-1,
+        currentRowIndicator = 'N'
+    WHERE cust_no = c_cust_no
+    AND currentRowIndicator = 'Y';
+
+    INSERT INTO customer_dim (customer_key, cust_no, comp_name, country, region, city, postcode, effectiveDate, expirationDate, currentRowIndicator)
+    VALUES (cust_dim_seq.nextval, c_cust_no, c_comp_name, c_country, c_region, c_city, c_postcode, SYSDATE, '31/12/9999', 'Y');
+    
+    COMMIT;
+
+    DBMS_OUTPUT.PUT_LINE('Record inserted successfully');
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
+
+exec Insert_Cust_Dim_Record(105824, 'Aston Martin', 'Poland', NULL, 'Warszawa', '01-012');
+
+

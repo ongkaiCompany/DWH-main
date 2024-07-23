@@ -1,0 +1,98 @@
+SET VERIFY OFF;
+SET PAGESIZE 44;
+SET LINESIZE 480;
+clear columns;
+clear breaks;
+clear computes;
+
+PROMPT Enter the year(s) for analysis (comma-separated, e.g., 2022, 2023):
+
+ACCEPT year_input CHAR PROMPT 'Year(s): '
+
+PROMPT Enter the country name or 'ALL' to analyze all countries:
+ACCEPT country_name CHAR PROMPT 'Country Name: '
+
+DEFINE page_count = 1
+REPFOOTER '                                                                   ( END OF REPORT )' 
+TTITLE '===========================================================================================================================================================' SKIP 1-
+'                                                     Monthly Analysis of Years &year_input for '&country_name' Country                             ' SQL.PNO " / &page_count" SKIP 1-
+'===========================================================================================================================================================' -
+SKIP 1 LEFT 'Report Date: '  _Date SKIP 1 -
+'===========================================================================================================================================================' -
+
+BTITLE '===========================================================================================================================================================' SKIP 1-
+'                                                                     End of Page' FORMAT 9 SQL.PNO SKIP 1-
+'===========================================================================================================================================================' SKIP 2-
+
+
+COLUMN year FORMAT A10 HEADING "Year";
+COLUMN cal_month_name FORMAT A10 HEADING "Month";
+COLUMN total_orders FORMAT 999,999 HEADING "Total Orders";
+COLUMN total_sales_amt FORMAT $999,999.99 HEADING "Total Sales Amount";
+COLUMN avg_sales_amt_per_order FORMAT $999,999.99 HEADING "Avg Sales/Order";
+COLUMN orders_change FORMAT 999.99 HEADING "Orders Change (%)" FORMAT A17;
+COLUMN sales_change FORMAT $999,999.99 HEADING "Sales Change";
+COLUMN avg_sales_change FORMAT $999,990.99 HEADING "Avg Sales Change";
+COLUMN sales_change_pct FORMAT 990.99 HEADING "Sales Change (%)" FORMAT A16;
+COLUMN highest_lowest_sales FORMAT A20 HEADING "Highest/Lowest Sales";
+BREAK ON year SKIP 1 ON report;
+COMPUTE SUM OF total_sales_amt ON year;
+COLUMN total_sales_amt FORMAT $999,999,999.99 HEADING "Total Sales Amount";
+COMPUTE SUM LABEL 'Total Orders: ' OF total_orders ON year;
+
+WITH monthly_sales AS (
+    SELECT 
+        TO_CHAR(d.cal_date, 'YYYY-MM') AS month_year,
+        TO_CHAR(d.cal_year) AS year,
+        d.cal_month_name AS cal_month_name,
+        COUNT(DISTINCT orf.orderid) AS total_orders, -- Adjusted to count distinct order IDs
+        SUM(orf.line_total) AS total_sales_amt,
+        SUM(orf.line_total) / COUNT(DISTINCT orf.orderid) AS avg_sales_amt_per_order, -- Adjusted to calculate average sales per order
+        MAX(SUM(orf.line_total)) OVER (PARTITION BY TO_CHAR(d.cal_year)) AS max_sales,
+        MIN(SUM(orf.line_total)) OVER (PARTITION BY TO_CHAR(d.cal_year)) AS min_sales
+    FROM 
+        order_fact orf
+    JOIN 
+        date_dim d ON orf.date_key = d.date_key
+    JOIN 
+        customer_dim c ON orf.customer_key = c.customer_key
+    WHERE 
+        TO_CHAR(d.cal_year) IN (&year_input)
+        AND (UPPER('&country_name') = 'ALL' OR UPPER(c.country) = UPPER('&country_name'))
+    GROUP BY 
+        TO_CHAR(d.cal_date, 'YYYY-MM'),
+        TO_CHAR(d.cal_year),
+        d.cal_month_name
+)
+SELECT
+    year,
+    cal_month_name,
+    total_orders,
+    total_sales_amt,
+    avg_sales_amt_per_order,
+    avg_sales_amt_per_order - LAG(avg_sales_amt_per_order) OVER (PARTITION BY year ORDER BY month_year) AS avg_sales_change,
+    CASE 
+        WHEN month_year LIKE '%-01' THEN TO_CHAR(ROUND(((total_orders - LAG(total_orders) OVER (PARTITION BY year ORDER BY month_year)) / NULLIF(LAG(total_orders) OVER (PARTITION BY year ORDER BY month_year), 0)) * 100, 2), '999.99')
+        ELSE TO_CHAR(ROUND(((total_orders - LAG(total_orders) OVER (PARTITION BY year ORDER BY month_year)) / NULLIF(LAG(total_orders) OVER (PARTITION BY year ORDER BY month_year), 0)) * 100, 2), '990.99') || '%' 
+    END AS orders_change,
+    total_sales_amt - LAG(total_sales_amt) OVER (PARTITION BY year ORDER BY month_year) AS sales_change,
+    CASE 
+        WHEN month_year LIKE '%-01' THEN TO_CHAR(ROUND(((total_sales_amt - LAG(total_sales_amt) OVER (PARTITION BY year ORDER BY month_year)) / NULLIF(LAG(total_sales_amt) OVER (PARTITION BY year ORDER BY month_year), 0)) * 100, 2), '999.99')
+        ELSE TO_CHAR(ROUND(((total_sales_amt - LAG(total_sales_amt) OVER (PARTITION BY year ORDER BY month_year)) / NULLIF(LAG(total_sales_amt) OVER (PARTITION BY year ORDER BY month_year), 0)) * 100, 2), '990.99') || '%' 
+    END AS sales_change_pct,
+    CASE 
+        WHEN total_sales_amt = max_sales THEN '      Highest'
+        WHEN total_sales_amt = min_sales THEN '       Lowest'
+        ELSE '         -'
+    END AS highest_lowest_sales
+FROM 
+    monthly_sales
+ORDER BY 
+    year,
+    month_year;
+
+clear columns
+clear breaks
+clear computes
+ttitle off
+btitle off

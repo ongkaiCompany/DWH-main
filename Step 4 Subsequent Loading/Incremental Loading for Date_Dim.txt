@@ -1,0 +1,98 @@
+ALTER SESSION SET NLS_DATE_FORMAT = 'DD/MM/YYYY';
+
+declare
+   StartDate date;
+   EndDate   date;
+   v_cal_date           date;
+   v_full_desc          varchar(45);
+   v_day_of_week        number(1);
+   v_day_num_month      number(2);
+   v_day_num_year       number(3);
+   v_last_day_month_ind char(1);
+   v_cal_week_end_date  date;
+   v_cal_week_year      number(2);
+   v_cal_month_name     varchar(9);
+   v_cal_month_number   number(2);
+   v_cal_year_month     char(7);
+   v_cal_quarter        char(2);
+   v_cal_year_quarter   char(7);
+   v_cal_year           number(4);
+   v_holiday_ind        char(1);
+   v_weekday_ind        char(1);
+   v_festive_event      varchar(45);
+
+-- counter number:=0;
+begin
+   select TRUNC(max(cal_date))+1
+   into StartDate
+   from Date_Dim;
+   EndDate := ADD_MONTHS(StartDate, 108); 
+   while (StartDate<=EndDate) loop
+-- counter:=counter+1;
+         v_cal_date:=StartDate;
+         v_full_desc:=to_char(StartDate,'Year Month Day DD');
+         v_day_of_week:=to_char(StartDate,'D');
+         v_day_num_month:=to_char(StartDate,'DD');
+         v_day_num_year:=to_char(StartDate,'DDD');
+
+         if (StartDate=last_day(StartDate)) then
+            v_last_day_month_ind:='Y';
+         else
+            v_last_day_month_ind:='N';
+         end if;
+
+         v_cal_week_end_date:= StartDate+(7-v_day_of_week);
+
+         v_cal_week_year:=to_char(StartDate,'IW');
+         v_cal_month_name:=to_char(StartDate,'MONTH');
+         v_cal_month_number:=to_char(StartDate,'MM');
+         v_cal_year:=to_char(StartDate,'YYYY');
+         v_cal_year_month:=v_cal_year||'-'||v_cal_month_number;
+
+         if (v_cal_month_number<=3) then
+            v_cal_quarter:='Q1';
+         elsif (v_cal_month_number<=6) then
+            v_cal_quarter:='Q2';
+         elsif (v_cal_month_number<=9) then
+            v_cal_quarter:='Q3';
+         else
+            v_cal_quarter:='Q4';
+         end if;
+
+         v_cal_year_quarter:=v_cal_year||'-'||v_cal_quarter;
+         v_holiday_ind:='N';
+
+         if (v_day_of_week BETWEEN 2 AND 6) then
+            v_weekday_ind:='Y';
+         else
+            v_weekday_ind:='N';
+         end if;
+
+         v_festive_event:=NULL;
+
+      insert into Date_Dim values(
+         date_seq.nextval,
+         v_cal_date,
+         v_full_desc,
+         v_day_of_week,
+         v_day_num_month,
+         v_day_num_year,
+         v_last_day_month_ind,
+         v_cal_week_end_date,
+         v_cal_week_year,
+         v_cal_month_name,
+         v_cal_month_number,
+         v_cal_year_month,
+         v_cal_quarter,
+         v_cal_year_quarter,
+         v_cal_year,
+         v_holiday_ind,
+         v_weekday_ind,
+         v_festive_event);
+
+    
+      StartDate:=StartDate+1;
+   end loop;
+-- dbms_output.put_line('Count is '||counter);
+end;
+/

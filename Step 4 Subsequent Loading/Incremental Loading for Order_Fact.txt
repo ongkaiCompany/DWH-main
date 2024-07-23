@@ -1,0 +1,57 @@
+ALTER SESSION SET NLS_DATE_FORMAT = 'DD/MM/YYYY';
+
+
+insert into n_orders values (order_seq.nextval, 100001, 1, '01/03/2024', '10/03/2024', '05/03/2024', 4, 50);
+insert into n_orders values (order_seq.nextval, 100002, 2, '03/03/2024', '12/03/2024', '07/03/2024', 5, 70);
+
+insert into n_order_details values (192037, 2, 19, 2, 0.1);
+insert into n_order_details values (192038, 3, 10, 3, 0.1);
+
+
+
+
+-- 1) Insert new records into order_fact table. 
+-- Only include records with valid values for freight (>0), unitprice(>0) and quantity (>0)
+-- A new record must not have the same orderid as any record currently in the DWH
+-- But the orderdate can be greater than or equal to the latest orderdate in the DWH
+
+INSERT INTO order_fact 
+SELECT D.date_key,
+       C.customer_key,
+       P.product_key,
+       SP.supplier_key,  
+       E.employee_key,  
+       ORD.order_id,       
+       SH.companyName,
+       OD.quantity,
+       OD.unitPrice,
+       OD.discount,
+       OD.quantity * OD.unitprice * (1 - OD.discount) AS total_price
+FROM n_orders ORD
+JOIN n_order_details OD ON ORD.order_ID = OD.orderID
+JOIN Products Prod ON OD.productID = Prod.productID
+JOIN Date_dim D ON ORD.orderDate = D.cal_date
+JOIN (
+    SELECT cust_no, customer_key, effectiveDate, expirationDate
+    FROM Customer_dim
+) C ON ORD.cust_id = C.cust_no 
+   AND ORD.orderDate BETWEEN C.effectiveDate AND C.expirationDate
+JOIN (
+    SELECT employeeID, employee_key, effectiveDate, expirationDate
+    FROM Employee_dim
+) E ON ORD.staffid = E.employeeID 
+   AND ORD.orderDate BETWEEN E.effectiveDate AND E.expirationDate
+JOIN Supplier_dim  SP on Prod.supplierID=SP.supplierID
+JOIN (
+    SELECT productID, product_key, effectiveDate, expirationDate
+    FROM Product_dim
+) P ON OD.productID = P.productID 
+   AND ORD.orderDate BETWEEN P.effectiveDate AND P.expirationDate
+JOIN Shippers SH ON ORD.shipvia = SH.shipperID
+WHERE ORD.order_id NOT IN (select distinct orderid from order_fact) 
+AND ORD.orderDate >= (SELECT MAX(cal_date) 
+                     FROM order_fact a, date_dim b
+                     where a.date_key = b.date_key)
+AND freight > 0
+AND OD.unitprice > 0 
+AND OD.quantity > 0; 

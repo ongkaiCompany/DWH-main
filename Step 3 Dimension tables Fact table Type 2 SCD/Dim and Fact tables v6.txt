@@ -1,0 +1,446 @@
+-- 1. DATE DIMENSION
+
+drop table order_fact;
+
+drop table date_dim;
+
+create table Date_Dim
+(date_key            number not null check(date_key >= 100001),
+ cal_date            date, 
+ full_desc           varchar(45),
+ day_of_week         number(1), 
+ day_num_month       number(2), 
+ day_num_year        number(3), 
+ last_day_month_ind  char(1), 
+ cal_week_end_date   date,  
+ cal_week_year       number(2), 
+ cal_month_name      varchar(9), 
+ cal_month_number    number(2), -- 1 to 12
+ cal_year_month      char(7), -- e.g '2024-01'
+ cal_quarter         char(2), 
+ cal_year_quarter    char(7), -- e.g '2024-Q1'
+ cal_year            number(4), 
+ holiday_ind         char(1), 
+ weekday_ind         char(1), 
+ festive_event       varchar(45), -- 'CNY','RAYA', etc.
+ primary key(date_key), 
+ CONSTRAINT check_day_of_week CHECK (day_of_week BETWEEN 1 AND 7),
+ CONSTRAINT check_day_num_month CHECK (day_num_month BETWEEN 1 AND 31),
+ CONSTRAINT check_day_num_year CHECK (day_num_year BETWEEN 1 AND 366),
+ CONSTRAINT check_last_day_month_ind CHECK (last_day_month_ind IN ('Y', 'N')), 
+ CONSTRAINT check_cal_month_number CHECK (cal_month_number BETWEEN 1 AND 12),
+ CONSTRAINT check_cal_week_year CHECK (cal_week_year BETWEEN 1 AND 53),
+ CONSTRAINT check_cal_quarter CHECK (cal_quarter IN ('Q1', 'Q2', 'Q3', 'Q4')),
+ CONSTRAINT check_cal_month_name CHECK (TRIM(UPPER(cal_month_name)) IN ('JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER')),
+ CONSTRAINT check_holiday_ind CHECK (holiday_ind IN ('Y', 'N')),
+ CONSTRAINT check_weekday_ind CHECK (weekday_ind IN ('Y', 'N')),
+ CONSTRAINT check_cal_year_quarter CHECK (REGEXP_LIKE(cal_year_quarter, '^[0-9]{4}-Q[1-4]$')),
+ CONSTRAINT check_cal_year_month CHECK (REGEXP_LIKE(TRIM(cal_year_month), '^[0-9]{4}-(0?[1-9]|1[0-2])$'))
+);
+
+drop sequence date_seq;
+
+create sequence date_seq
+   start with 100001
+   increment by 1;
+
+declare
+   StartDate date:=to_date('01/01/2015','dd/mm/yyyy');
+   EndDate   date:=to_date('31/12/2024','dd/mm/yyyy');
+   v_cal_date           date;
+   v_full_desc          varchar(45);
+   v_day_of_week        number(1);
+   v_day_num_month      number(2);
+   v_day_num_year       number(3);
+   v_last_day_month_ind char(1);
+   v_cal_week_end_date  date;
+   v_cal_week_year      number(2);
+   v_cal_month_name     varchar(9);
+   v_cal_month_number   number(2);
+   v_cal_year_month     char(7);
+   v_cal_quarter        char(2);
+   v_cal_year_quarter   char(7);
+   v_cal_year           number(4);
+   v_holiday_ind        char(1);
+   v_weekday_ind        char(1);
+   v_festive_event      varchar(45);
+
+-- counter number:=0;
+begin
+   while (StartDate<=EndDate) loop
+-- counter:=counter+1;
+         v_cal_date:=StartDate;
+         v_full_desc:=to_char(StartDate,'Year Month Day DD');
+         v_day_of_week:=to_char(StartDate,'D');
+         v_day_num_month:=to_char(StartDate,'DD');
+         v_day_num_year:=to_char(StartDate,'DDD');
+
+         if (StartDate=last_day(StartDate)) then
+            v_last_day_month_ind:='Y';
+         else
+            v_last_day_month_ind:='N';
+         end if;
+
+         v_cal_week_end_date:= StartDate+(7-v_day_of_week);
+
+         v_cal_week_year:=to_char(StartDate,'IW');
+         v_cal_month_name:=to_char(StartDate,'MONTH');
+         v_cal_month_number:=to_char(StartDate,'MM');
+         v_cal_year:=to_char(StartDate,'YYYY');
+         v_cal_year_month:=v_cal_year||'-'||v_cal_month_number;
+
+         if (v_cal_month_number<=3) then
+            v_cal_quarter:='Q1';
+         elsif (v_cal_month_number<=6) then
+            v_cal_quarter:='Q2';
+         elsif (v_cal_month_number<=9) then
+            v_cal_quarter:='Q3';
+         else
+            v_cal_quarter:='Q4';
+         end if;
+
+         v_cal_year_quarter:=v_cal_year||'-'||v_cal_quarter;
+         v_holiday_ind:='N';
+
+         if (v_day_of_week BETWEEN 2 AND 6) then
+            v_weekday_ind:='Y';
+         else
+            v_weekday_ind:='N';
+         end if;
+
+         v_festive_event:=NULL;
+
+      insert into Date_Dim values(
+         date_seq.nextval,
+         v_cal_date,
+         v_full_desc,
+         v_day_of_week,
+         v_day_num_month,
+         v_day_num_year,
+         v_last_day_month_ind,
+         v_cal_week_end_date,
+         v_cal_week_year,
+         v_cal_month_name,
+         v_cal_month_number,
+         v_cal_year_month,
+         v_cal_quarter,
+         v_cal_year_quarter,
+         v_cal_year,
+         v_holiday_ind,
+         v_weekday_ind,
+         v_festive_event);
+
+    
+      StartDate:=StartDate+1;
+   end loop;
+-- dbms_output.put_line('Count is '||counter);
+end;
+/
+
+update date_dim
+set holiday_ind='Y'
+where cal_date = to_date('01/01/2024', 'dd/mm/yyyy');
+
+update date_dim
+set festive_event='CNY'
+where cal_date = to_date('10/02/2024', 'dd/mm/yyyy');
+
+-- ***************************************************
+ALTER SESSION SET NLS_DATE_FORMAT = 'DD/MM/YYYY';
+-- 2. PRODUCT DIMENSION 
+
+drop table Product_dim;
+
+CREATE table Product_dim
+(product_key          number not null, -- for type 2 SCD
+ productID            number not null,
+ productName          varchar(40) not null,
+ categoryName         varchar(15) not null,
+ discontinued         number(1) not null check(discontinued IN (0,1)),
+ effectiveDate        date Default '01/01/2015', -- for type 2 SCD
+ expirationDate       date Default '31/12/9999', -- for type 2 SCD
+ currentRowIndicator  CHAR(1) DEFAULT 'Y' NOT NULL CHECK (UPPER(currentRowIndicator) IN ('Y', 'N')), -- for type 2 SCD
+ primary key(product_key),
+ CONSTRAINT check_productKey CHECK (product_key >= 1001),
+ CONSTRAINT check_endDateProduct CHECK (expirationDate >= effectiveDate)
+);
+
+delete product_dim;
+
+drop sequence prod_dim_seq;
+
+create sequence prod_dim_seq
+  start with 1001
+  increment by 1;
+
+insert into Product_dim (product_key, productID, productName, categoryName, discontinued)
+select prod_dim_seq.nextval,
+       P.productID,
+       UPPER(P.productName),
+       UPPER(C.categoryName),
+       P.discontinued
+from products   P
+JOIN categories C on P.categoryID=C.categoryID;
+
+commit;
+
+-- *****************************************************
+
+-- 3. SUPPLIER DIMENSION (DONE)
+
+drop sequence supplier_dim_seq;
+
+create sequence supplier_dim_seq
+  start with 1001
+  increment by 1;
+
+drop table supplier_dim;
+
+CREATE TABLE Supplier_dim (
+  Supplier_key        number not null,
+  SupplierID          number NOT NULL, 
+  supplierName        VARCHAR(40) NOT NULL,  
+  Country             VARCHAR(15) CHECK (NOT REGEXP_LIKE(Country, '[[:digit:]]')),  
+  Region              VARCHAR(15), 
+  City                VARCHAR(15),   
+  PostalCode          VARCHAR(10),   
+  PRIMARY KEY (Supplier_key),
+  CONSTRAINT check_supplierKey CHECK (supplier_key >= 1001)
+); 
+
+
+insert into supplier_dim (Supplier_key, SupplierID, SupplierName, Country, Region, City, PostalCode)
+select supplier_dim_seq.nextval,
+       supplierid,
+       UPPER(companyname),
+       UPPER(country),
+       UPPER(region),
+       UPPER(City),
+       UPPER(postalcode)
+from suppliers;
+
+commit;
+
+-- *****************************************************
+
+-- 4. EMPLOYEE DIMENSION (DONE)
+
+drop sequence employee_dim_seq;
+
+create sequence employee_dim_seq
+  start with 1001
+  increment by 1;
+
+drop table employee_dim; 
+
+CREATE TABLE Employee_dim (
+  Employee_key         number not null,
+  EmployeeID           number not null, 
+  EmployeeName         VARCHAR(40) not null CHECK (NOT REGEXP_LIKE(EmployeeName, '[[:digit:]]')),
+  HireDate             DATE, 
+  Country              VARCHAR(15) CHECK (NOT REGEXP_LIKE(Country, '[[:digit:]]')),
+  Region               VARCHAR(15),  
+  City                 VARCHAR(15),   
+  PostalCode           VARCHAR(10),   
+  EffectiveDate        Date Default '01/01/2015',
+  ExpirationDate       Date Default '31/12/9999',
+  currentRowIndicator  CHAR(1) DEFAULT 'Y' NOT NULL CHECK (UPPER(currentRowIndicator) IN ('Y', 'N')),
+  PRIMARY KEY (Employee_key),
+ CONSTRAINT check_employeeKey CHECK (employee_key >= 1001),
+ CONSTRAINT check_endDateEmployee CHECK (expirationDate >= effectiveDate)
+);
+
+insert into Employee_dim (Employee_key, EmployeeID, EmployeeName, HireDate, Country, Region, City, PostalCode)
+select employee_dim_seq.nextval,
+       employeeid,
+       firstname || ' ' || lastname,
+       hiredate,
+       UPPER(country),
+       UPPER(region),
+       UPPER(city),
+       UPPER(postalcode)
+from employees;
+
+commit;
+
+
+-- ******************************************************
+
+-- 5. CUSTOMER DIMENSION (DONE)
+
+drop sequence cust_dim_seq;
+
+create sequence cust_dim_seq
+  start with 1001
+  increment by 1;
+
+drop table customer_dim;
+
+create table customer_dim
+(customer_key        number not null CHECK (Customer_Key > 1000) ,
+ cust_no             number not null,
+ comp_name           varchar(40) not null,
+ country             varchar(15) CHECK (NOT REGEXP_LIKE(Country, '[[:digit:]]')),
+ region              varchar(15),
+ city                varchar(15), 
+ postcode            varchar(10),
+ effectiveDate       date not null,
+ expirationDate      date Default '31/12/9999',
+ currentRowIndicator CHAR(1) DEFAULT 'Y' NOT NULL CHECK (UPPER(currentRowIndicator) IN ('Y', 'N')),
+ primary key(customer_key),
+ CONSTRAINT check_customerKey CHECK (customer_key >= 1001),
+ CONSTRAINT check_endDateCustomer CHECK (expirationDate >= effectiveDate)
+);
+
+INSERT INTO customer_dim (customer_key, cust_no, comp_name, country, region, city, postcode, effectiveDate)
+SELECT cust_dim_seq.nextval,
+       cust_no, 
+       comp_name,
+       country,
+       region,
+       city,
+       postcode,
+       (SELECT MIN(OrderDate)
+        FROM n_orders no
+        WHERE no.Cust_ID = nc.cust_no) 
+FROM n_cust nc;
+
+commit;
+
+-- ****************************************************************
+
+--6. ORDER FACT table
+-- this one ok
+create table order_fact
+(date_key      number not null,
+ customer_key  number not null,
+ product_key   number not null,
+ supplier_key  number not null,
+ employee_key  number not null,
+ orderid       number not null,
+ shipperName   varchar(40) not null,
+ quantity      number(3) not null,
+ unitPrice     number(6,2) not null,
+ discount      number(3,2) not null,
+ line_total    number(9,2) not null,
+ primary key (date_key, customer_key, product_key, supplier_key, employee_key, orderid),
+ foreign key (date_key) references Date_dim(date_key),
+ foreign key (customer_key) references Customer_dim(customer_key),
+ foreign key (product_key) references Product_dim(product_key),
+ foreign key (supplier_key) references Supplier_dim(supplier_key),
+ foreign key (employee_key) references Employee_dim(employee_key)
+);
+
+
+-- new version v2 
+INSERT INTO order_fact
+SELECT D.date_key,
+       C.customer_key,
+       P.product_key,
+       SP.supplier_key,  
+       E.employee_key,  
+       ORD.order_id,       
+       SH.companyName,
+       OD.quantity,
+       OD.unitPrice,
+       OD.discount,
+       OD.quantity * OD.unitprice * (1 - OD.discount)
+FROM n_orders ORD
+JOIN n_order_details OD ON ORD.order_ID = OD.orderID
+JOIN Products Prod ON OD.productID = Prod.productID
+JOIN Date_dim D ON ORD.orderDate = D.cal_date
+JOIN (
+    SELECT cust_no, customer_key, effectiveDate, expirationDate
+    FROM Customer_dim
+) C ON ORD.cust_id = C.cust_no 
+   AND ORD.orderDate BETWEEN C.effectiveDate AND C.expirationDate
+JOIN (
+    SELECT employeeID, employee_key, effectiveDate, expirationDate
+    FROM Employee_dim
+) E ON ORD.staffid = E.employeeID 
+   AND ORD.orderDate BETWEEN E.effectiveDate AND E.expirationDate
+JOIN Supplier_dim  SP on Prod.supplierID=SP.supplierID
+JOIN (
+    SELECT productID, product_key, effectiveDate, expirationDate
+    FROM Product_dim
+) P ON OD.productID = P.productID 
+   AND ORD.orderDate BETWEEN P.effectiveDate AND P.expirationDate
+JOIN Shippers SH ON ORD.shipvia = SH.shipperID;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,137 @@
+alter session set NLS_DATE_FORMAT='YYYY-MM-DD';
+
+INSERT INTO Employees VALUES (10, 'Keanu', 'Reeve', 'Inside Sales Coordinator', '1958-01-09', '1994-03-05', 'Seattle', 'WA', '98105', 'USA', 2);
+INSERT INTO Employees VALUES (11, 'Kean', 'Wong', 'Sales Representative', '1966-01-27', '1994-11-15', 'London', NULL, 'WG2 7LT', 'UK', 5);
+
+
+--1) Staging Area
+drop table employee_staging_area;
+
+create table employee_staging_area as
+select Employeeid,
+       firstName || ' ' || lastName as EmployeeName,
+       hiredate,
+       upper(country) as Country,
+       upper(region) as Region,
+       upper(city) as City,
+       upper(postalcode) as PostalCode
+from employees;
+
+--2) VIEW
+create or replace view count_emp_data as
+select count(*) as Num_Records_Before_Scrub
+from employee_staging_area;
+
+select * from count_emp_data;
+
+set serveroutput on
+--3) Scrubbing Dirty Data
+CREATE OR REPLACE PROCEDURE clean_employee_data AS
+BEGIN
+  DELETE FROM employee_staging_area 
+  WHERE country is null and region is null and city is null and postalcode is null;
+  FOR emp_rec in (SELECT * FROM employee_staging_area) LOOP
+           
+      IF REGEXP_LIKE(emp_rec.country, '[0-9]') THEN
+        DBMS_OUTPUT.PUT_LINE('Error: Country cannot contain numbers');
+        delete from employee_staging_area
+        where employeeid = emp_rec.employeeid;
+        continue;
+      END IF;
+
+      IF REGEXP_LIKE(emp_rec.region, '[0-9]') THEN
+        DBMS_OUTPUT.PUT_LINE('Error: Region cannot contain numbers');
+        delete from employee_staging_area
+        where employeeid = emp_rec.employeeid;
+        continue;
+      END IF;
+
+      IF REGEXP_LIKE(emp_rec.city, '[0-9]') THEN
+        DBMS_OUTPUT.PUT_LINE('Error: City cannot contain numbers');
+        delete from employee_staging_area
+        where employeeid = emp_rec.employeeid;
+        continue;
+      END IF;
+
+
+      -- Clean country, region, city and postalcode
+      UPDATE employee_staging_area
+      set country = upper(emp_rec.country), 
+          region = upper(emp_rec.region), 
+          city = upper(emp_rec.city), 
+          postalcode = upper(emp_rec.postalcode),
+          employeename = INITCAP(REGEXP_REPLACE(emp_rec.employeename, '[^a-zA-Z ]', ''))
+      where employeeid = emp_rec.employeeid;
+
+  END LOOP;
+  COMMIT;
+EXCEPTION
+  WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
+
+exec clean_employee_data;
+
+
+--4) VIEW
+create or replace view count_emp_data as
+select count(*) as Num_Records_After_Scrub
+from employee_staging_area;
+
+select * from count_emp_data;
+
+--5) 
+ALTER SESSION SET NLS_DATE_FORMAT = 'DD/MM/YYYY';
+CREATE OR REPLACE PROCEDURE Insert_CEmp_Dim AS
+BEGIN
+    insert into Employee_dim (Employee_key, EmployeeID, EmployeeName, HireDate, Country, Region, City, PostalCode)
+    select employee_dim_seq.nextval, E.*
+     from employee_staging_area E
+     where E.employeeid not in (select distinct employeeid from employee_dim);
+END;
+/
+
+exec Insert_CEmp_Dim;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
