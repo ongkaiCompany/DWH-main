@@ -1,0 +1,70 @@
+set linesize 5000
+set pagesize 95
+DEFINE page_count = 1
+
+ACCEPT year_input CHAR PROMPT 'Please enter the year for analysis (e.g., 2015-2024): '
+ACCEPT product_input NUMBER PROMPT 'How many records of products are to be displayed? (Enter a number): '
+
+BREAK ON REPORT
+COMPUTE SUM LABEL 'Total' OF "Sales($)" "Quantity" ON REPORT
+COMPUTE AVG LABEL 'Average' OF "Sale_Price($)" "Discount_Rate(%)" "Unit_Price($)" ON REPORT
+
+REPFOOTER '                                                                   ( END OF REPORT )' 
+TTITLE '========================================================================================================================================' SKIP 1-
+'                                                     &year_input Annual Sales and Profitability Report                 ' SQL.PNO " / &page_count" SKIP 1-
+'========================================================================================================================================' -
+SKIP 1 LEFT 'Report Date: '  _Date SKIP 1 -
+'========================================================================================================================================' -
+
+BTITLE '========================================================================================================================================' SKIP 1-
+'                                                                     End of Page' FORMAT 9 SQL.PNO SKIP 1-
+'========================================================================================================================================' SKIP 2-
+
+
+COLUMN "Unit_Price($)" FORMAT $999,999.00
+COLUMN "Discount_Rate(%)" FORMAT 99.00
+COLUMN "Sale_Price($)" FORMAT $999,999.00
+COLUMN "Quantity" FORMAT 999,999
+COLUMN "Sales($)" FORMAT $999,999,999.00
+COLUMN "SalesPct(%)" FORMAT 999.00
+
+SELECT
+  ProductID,
+  ProductName,
+  "Unit_Price($)",
+  "Discount_Rate(%)",
+  "Sale_Price($)",
+  "Quantity",
+  "Sales($)",
+  "SalesPct(%)"
+FROM (
+  SELECT
+    p.ProductID,
+    p.ProductName,
+    AVG(f.UnitPrice) AS "Unit_Price($)",
+    AVG(f.Discount) * 100 AS "Discount_Rate(%)",
+    AVG(f.Line_Total / f.Quantity) AS "Sale_Price($)",
+    SUM(f.Quantity) AS "Quantity",
+    SUM(f.Line_Total) AS "Sales($)",
+    ROUND((SUM(f.Line_Total) / (
+        SELECT SUM(of2.Line_Total)
+        FROM Order_Fact of2
+        JOIN Date_dim od2 ON of2.date_key = od2.date_key
+        WHERE od2.cal_year = &year_input
+    ) * 100), 2) AS "SalesPct(%)",
+    ROW_NUMBER() OVER (ORDER BY SUM(f.Line_Total) DESC) AS rn
+  FROM
+    Order_Fact f
+  JOIN
+    Product_Dim p ON f.product_key = p.Product_key
+  JOIN
+    Date_dim d ON f.date_key = d.date_key
+  WHERE
+    d.cal_year = &year_input 
+  GROUP BY
+    p.ProductID, p.ProductName
+)
+WHERE rn <= &product_input;
+
+TTITLE OFF
+BTITLE OFF

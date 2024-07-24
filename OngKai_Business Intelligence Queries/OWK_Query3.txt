@@ -1,0 +1,116 @@
+SET PAGESIZE 28
+SET LINESIZE 1000
+DEFINE page_count = 1
+COLUMN "Sales" FORMAT A17
+COLUMN "Previous_Month" FORMAT A17
+COLUMN "Growth (%)" FORMAT 999.00
+
+
+ACCEPT p_year PROMPT 'Please enter the year for the analysis(e.g. 2015-2024):: '
+
+
+
+
+REPFOOTER'			( END OF REPORT )' 
+TTITLE '=======================================================================' SKIP 1-
+' &p_year Monthly Sales Performance and Growth Analysis     ' SQL.PNO " / &page_count" SKIP 1-
+'=======================================================================' -
+SKIP 1 LEFT 'Report Date: '  _Date SKIP 1 -
+'=======================================================================' -
+
+BTITLE '=======================================================================' SKIP 1-
+'                          End of Page' FORMAT 9 SQL.PNO SKIP 1-
+'=======================================================================' SKIP 2-
+
+
+WITH MonthlySales AS (
+    SELECT
+        d.cal_month_number,
+        SUM(f.line_total) AS MonthlySales
+    FROM
+        order_Fact f
+    JOIN
+        date_dim d ON f.Date_key = d.Date_key
+    WHERE
+        d.cal_year_month LIKE '&p_year-%'
+    GROUP BY
+        d.cal_month_number
+),
+PreviousMonth AS (
+    SELECT
+        cal_month_number,
+        LAG(MonthlySales) OVER (ORDER BY cal_month_number) AS PreviousMonthSales
+    FROM
+        MonthlySales
+),
+SalesAnalysis AS (
+    SELECT
+        a.cal_month_number,
+        a.MonthlySales,
+        b.PreviousMonthSales,
+        CASE
+            WHEN b.PreviousMonthSales IS NULL THEN NULL
+            ELSE ROUND((a.MonthlySales - b.PreviousMonthSales) / COALESCE(b.PreviousMonthSales, 1) * 100, 2)
+        END AS GrowthRate,
+        CASE
+            WHEN b.PreviousMonthSales IS NULL THEN 'First Month'
+            WHEN a.MonthlySales > b.PreviousMonthSales THEN 'Increase'
+            WHEN a.MonthlySales < b.PreviousMonthSales THEN 'Decrease'
+            ELSE 'Stable'
+        END AS Status
+    FROM
+        MonthlySales a
+    LEFT JOIN
+        PreviousMonth b ON a.cal_month_number = b.cal_month_number
+),
+TotalAndAverage AS (
+    SELECT
+        'Total Sales Amount' AS Metric,
+        SUM(MonthlySales) AS Amount,
+        14 AS SortOrder -- Adjusted to 14 for clarity as it comes after the months
+    FROM
+        MonthlySales
+    UNION ALL
+    SELECT
+        'Average Sales Amount' AS Metric,
+        SUM(MonthlySales) / 12 AS Amount,
+        13 AS SortOrder -- Adjusted to 13 for clarity as it comes before total
+    FROM
+        MonthlySales
+),
+FinalResults AS (
+    SELECT
+        CASE cal_month_number
+            WHEN 1 THEN 'January'
+            WHEN 2 THEN 'February'
+            WHEN 3 THEN 'March'
+            WHEN 4 THEN 'April'
+            WHEN 5 THEN 'May'
+            WHEN 6 THEN 'June'
+            WHEN 7 THEN 'July'
+            WHEN 8 THEN 'August'
+            WHEN 9 THEN 'September'
+            WHEN 10 THEN 'October'
+            WHEN 11 THEN 'November'
+            WHEN 12 THEN 'December'
+        END AS Month,
+        TO_CHAR(a.MonthlySales, 'FM$999,999,990.00') AS "Sales",
+        TO_CHAR(a.PreviousMonthSales, 'FM$999,999,990.00') AS "Previous_Month",
+        TO_CHAR(a.GrowthRate, '999.00') AS "Growth (%)",
+        a.Status,
+        a.cal_month_number
+    FROM
+        SalesAnalysis a
+    UNION ALL
+    SELECT
+        Metric AS Month,
+        TO_CHAR(Amount, 'FM$999,999,990.00') AS "Sales",
+        NULL AS "Previous_Month",
+        NULL AS "Growth (%)",
+        NULL AS Status,
+        SortOrder AS cal_month_number
+    FROM
+        TotalAndAverage
+)
+SELECT Month, "Sales", "Previous_Month", "Growth (%)" FROM FinalResults
+ORDER BY cal_month_number;

@@ -1,0 +1,58 @@
+set linesize 3000
+set pagesize 30
+DEFINE page_count = 1
+
+ACCEPT year_input CHAR PROMPT 'Please enter the year for analysis (e.g. 2015-2024): '
+
+BREAK ON REPORT
+COMPUTE SUM LABEL 'Total' OF "Total_Sales_&year_input.($)" "Previous Year Sales($)" ON REPORT
+COMPUTE AVG LABEL 'Average' OF "Q1_&year_input.($)" "Q2_&year_input.($)" "Q3_&year_input.($)" "Q4_&year_input.($)" "Growth(%)" ON REPORT
+
+
+REPFOOTER '                                                                   ( END OF REPORT )' 
+TTITLE '===========================================================================================================================================================' SKIP 1-
+'                                                       &year_input  Employee Sales Performance and Year-over-Year Growth Analysis                 ' SQL.PNO " / &page_count" SKIP 1-
+'===========================================================================================================================================================' -
+SKIP 1 LEFT 'Report Date: '  _Date SKIP 1 -
+'===========================================================================================================================================================' -
+
+BTITLE '===========================================================================================================================================================' SKIP 1-
+'                                                                     End of Page' FORMAT 9 SQL.PNO SKIP 1-
+'===========================================================================================================================================================' SKIP 2-
+
+
+COLUMN "ID" FORMAT A10
+COLUMN "Employee Name" FORMAT A17
+COLUMN "Q1_&year_input.($)" FORMAT $999,999,999.00
+COLUMN "Q2_&year_input.($)" FORMAT $999,999,999.00
+COLUMN "Q3_&year_input.($)" FORMAT $999,999,999.00
+COLUMN "Q4_&year_input.($)" FORMAT $999,999,999.00
+COLUMN "Total_Sales_&year_input.($)" FORMAT $999,999,999.00
+COLUMN "Previous Year Sales($)" FORMAT $999,999,999.00
+COLUMN "Growth(%)" FORMAT 999.99
+
+SELECT
+    TO_CHAR(e.employeeID) AS "ID",
+    e.employeeName AS "Employee Name",
+    SUM(CASE WHEN d.cal_year = &year_input AND d.cal_quarter = 'Q1' THEN f.line_total END) AS "Q1_&year_input.($)",
+    SUM(CASE WHEN d.cal_year = &year_input AND d.cal_quarter = 'Q2' THEN f.line_total END) AS "Q2_&year_input.($)",
+    SUM(CASE WHEN d.cal_year = &year_input AND d.cal_quarter = 'Q3' THEN f.line_total END) AS "Q3_&year_input.($)",
+    SUM(CASE WHEN d.cal_year = &year_input AND d.cal_quarter = 'Q4' THEN f.line_total END) AS "Q4_&year_input.($)",
+    SUM(CASE WHEN d.cal_year = &year_input THEN f.line_total END) AS "Total_Sales_&year_input.($)",
+    SUM(CASE WHEN d.cal_year = &year_input-1 THEN f.line_total END) AS "Previous Year Sales($)",
+    ROUND((SUM(CASE WHEN d.cal_year = &year_input THEN f.line_total END) - 
+           SUM(CASE WHEN d.cal_year = &year_input-1 THEN f.line_total END)) / 
+          NULLIF(SUM(CASE WHEN d.cal_year = &year_input-1 THEN f.line_total END), 0) * 100, 2) AS "Growth(%)"
+FROM
+    Order_Fact f
+JOIN
+    Employee_dim e ON f.employee_key = e.employee_key
+JOIN
+    Date_dim d ON f.date_key = d.date_key
+GROUP BY
+    e.employeeID, e.employeeName
+ORDER BY
+    "Total_Sales_&year_input.($)" DESC;
+
+TTITLE OFF
+BTITLE OFF
