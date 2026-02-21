@@ -19,17 +19,17 @@ If you are interested in the documentation, you may refer to the pdf report that
 
 Analysis
 1. Sales Trend Analysis
-https://github.com/ongkaiCompany/DWH-main/blob/85b12f0fb75c454b40220370c5fdf182c212b3e8/bar%20Chart.png
+![image alt](https://github.com/ongkaiCompany/DWH-main/blob/85b12f0fb75c454b40220370c5fdf182c212b3e8/bar%20Chart.png)
 Insight: Identified a significant 41% sales peak in Dec 2023 ($350K). This visualization helps stakeholders understand seasonal demand and plan year-end inventory.
 
 2. Product Contribution (Pareto Analysis)
-https://github.com/ongkaiCompany/DWH-main/blob/85b12f0fb75c454b40220370c5fdf182c212b3e8/Line%20graph.png
+![image alt](https://github.com/ongkaiCompany/DWH-main/blob/85b12f0fb75c454b40220370c5fdf182c212b3e8/Line%20graph.png)
 Insight: The Top 10 products drive 40% of total revenue, with "Côte de Blaye" alone contributing 12%.
 Actionable Advice: Recommended prioritized inventory management and targeted marketing for these high-velocity items to maximize ROI.
 
 
 3. Employee Performance (YoY)
-https://github.com/ongkaiCompany/DWH-main/blob/85b12f0fb75c454b40220370c5fdf182c212b3e8/bar%20Chart.png
+![image alt](https://github.com/ongkaiCompany/DWH-main/blob/85b12f0fb75c454b40220370c5fdf182c212b3e8/bar%20Chart.png)
 Insight: Performed Year-over-Year (YoY) comparisons (2022 vs 2023) to evaluate individual sales growth and productivity trends across the sales team.
 
 
